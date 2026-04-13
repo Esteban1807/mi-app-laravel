@@ -1,0 +1,30 @@
+pipeline {
+    agent any
+    environment {
+        DOCKER_IMAGE = "tu-usuario/laravel-app:${env.BUILD_ID}"
+    }
+    stages {
+        stage('Checkout') { steps { checkout scm } }
+
+        stage('SonarQube') { steps { withSonarQubeEnv('Sonar') { sh 'sonar-
+        scanner' } } }
+
+        stage('Build Docker') { steps { sh "docker build -t ${DOCKER_IMAGE} ." }
+    }
+        stage('Push Docker') { steps {
+            withCredentials([usernamePassword(credentialsId: 'docker-hub', usernameVariable:
+            'USER', passwordVariable: 'PASS')]) {
+                sh "docker login -u $USER -p $PASS && docker push ${DOCKER_IMAGE}"
+                }}}
+                stage('Deploy to Kubernetes') {
+                    steps {
+                        sh "kubectl set image deployment/laravel-app laravel-app=${DOCKER_IMAGE} --record"
+                        sh "kubectl rollout status deployment/laravel-app"
+                        }
+                    }
+            }
+    post {
+        success { echo "¡Pipeline exitoso! App desplegada." }
+        failure { echo "Pipeline falló. Revisa logs." }
+        }
+}
